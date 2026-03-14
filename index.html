@@ -3,11 +3,265 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <title>Bubble Sort Fun</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #0f172a;
+        color: #e2e8f0;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+      }
+      .app {
+        width: min(1040px, 96vw);
+        background: #111827;
+        border: 1px solid #334155;
+        border-radius: 16px;
+        padding: 20px;
+      }
+      h1 { margin: 0 0 10px; }
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
+      .hint {
+        color: #93c5fd;
+        margin: 0 0 12px;
+        font-size: 14px;
+      }
+      button, input, select {
+        border-radius: 8px;
+        border: 1px solid #475569;
+        background: #1e293b;
+        color: inherit;
+        padding: 8px 12px;
+      }
+      #bars {
+        height: 380px;
+        display: flex;
+        align-items: end;
+        gap: 4px;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 12px;
+        background: #020617;
+      }
+      .bar {
+        flex: 1;
+        background: #3b82f6;
+        border-radius: 4px 4px 0 0;
+        transition: height 180ms ease;
+        cursor: pointer;
+      }
+      .bar:hover { filter: brightness(1.1); }
+      .bar.active { background: #f59e0b; }
+      .bar.selected { background: #ef4444; }
+      .bar.sorted { background: #10b981; }
+      .status {
+        margin-top: 10px;
+        color: #94a3b8;
+        font-size: 14px;
+      }
+      .win {
+        color: #22c55e;
+        font-weight: 700;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <main class="app">
+      <h1>Bubble Sort Fun</h1>
+      <div class="toolbar">
+        <label>
+          Mode
+          <select id="mode">
+            <option value="player">Player (you swap adjacent bars)</option>
+            <option value="auto">Auto (watch bubble sort)</option>
+          </select>
+        </label>
+        <button id="shuffle">Shuffle</button>
+        <button id="step">Step</button>
+        <button id="play">Play</button>
+        <label>Size <input id="size" type="number" min="8" max="80" value="24" /></label>
+      </div>
+      <p class="hint" id="hint">Click one bar, then click a neighboring bar to swap. Sort from shortest to tallest.</p>
+      <section id="bars"></section>
+      <p class="status" id="status">Ready.</p>
+    </main>
+
+    <script>
+      const barsEl = document.getElementById('bars');
+      const statusEl = document.getElementById('status');
+      const hintEl = document.getElementById('hint');
+      const modeEl = document.getElementById('mode');
+      const sizeEl = document.getElementById('size');
+      const stepBtn = document.getElementById('step');
+      const playBtn = document.getElementById('play');
+
+      let arr = [];
+      let i = 0;
+      let j = 0;
+      let playing = null;
+      let selected = null;
+      let moves = 0;
+
+      const isPlayerMode = () => modeEl.value === 'player';
+
+      function isSorted(a = arr) {
+        for (let k = 0; k < a.length - 1; k++) {
+          if (a[k] > a[k + 1]) return false;
+        }
+        return true;
+      }
+
+      function reset() {
+        const n = Math.max(8, Math.min(80, Number(sizeEl.value) || 24));
+        arr = Array.from({ length: n }, (_, idx) => idx + 1).sort(() => Math.random() - 0.5);
+        i = 0;
+        j = 0;
+        moves = 0;
+        selected = null;
+        stop();
+        setModeUI();
+        statusEl.classList.remove('win');
+        statusEl.textContent = isPlayerMode()
+          ? 'Shuffled. Your turn!'
+          : 'Shuffled. Press Step or Play.';
+        render();
+      }
+
+      function setModeUI() {
+        const player = isPlayerMode();
+        playBtn.disabled = player;
+        stepBtn.disabled = player;
+        hintEl.textContent = player
+          ? 'Click one bar, then click a neighboring bar to swap. Sort from shortest to tallest.'
+          : 'Auto mode: use Step or Play to watch bubble sort solve the array.';
+      }
+
+      function render(active = []) {
+        const max = Math.max(...arr);
+        barsEl.innerHTML = '';
+        arr.forEach((v, idx) => {
+          const bar = document.createElement('div');
+          bar.className = 'bar';
+          if (active.includes(idx)) bar.classList.add('active');
+          if (selected === idx) bar.classList.add('selected');
+          if (!isPlayerMode() && idx >= arr.length - i) bar.classList.add('sorted');
+          if (isPlayerMode() && isSorted() && idx >= 0) bar.classList.add('sorted');
+          bar.style.height = `${(v / max) * 100}%`;
+          bar.title = `Value ${v}`;
+          bar.addEventListener('click', () => onBarClick(idx));
+          barsEl.appendChild(bar);
+        });
+      }
+
+      function onBarClick(index) {
+        if (!isPlayerMode()) return;
+        if (selected === null) {
+          selected = index;
+          statusEl.textContent = `Selected index ${index}. Pick a neighboring bar to swap.`;
+          render();
+          return;
+        }
+
+        if (selected === index) {
+          selected = null;
+          statusEl.textContent = 'Selection cleared.';
+          render();
+          return;
+        }
+
+        if (Math.abs(selected - index) !== 1) {
+          statusEl.textContent = 'Only neighboring bars can be swapped.';
+          return;
+        }
+
+        [arr[selected], arr[index]] = [arr[index], arr[selected]];
+        moves++;
+        const a = Math.min(selected, index);
+        const b = Math.max(selected, index);
+        selected = null;
+
+        if (isSorted()) {
+          statusEl.classList.add('win');
+          statusEl.textContent = `🎉 You sorted it in ${moves} moves!`;
+        } else {
+          statusEl.classList.remove('win');
+          statusEl.textContent = `Move ${moves}: swapped index ${a} and ${b}.`;
+        }
+        render([a, b]);
+      }
+
+      function step() {
+        if (isPlayerMode()) return true;
+        if (i >= arr.length - 1) {
+          statusEl.textContent = 'Sorted!';
+          statusEl.classList.add('win');
+          stop();
+          render();
+          return true;
+        }
+        const a = j;
+        const b = j + 1;
+        if (arr[a] > arr[b]) [arr[a], arr[b]] = [arr[b], arr[a]];
+        j++;
+        if (j >= arr.length - i - 1) {
+          j = 0;
+          i++;
+        }
+        statusEl.classList.remove('win');
+        statusEl.textContent = `Pass ${i + 1}, compare index ${a} and ${b}`;
+        render([a, b]);
+        return false;
+      }
+
+      function stop() {
+        if (playing) {
+          clearInterval(playing);
+          playing = null;
+          playBtn.textContent = 'Play';
+        }
+      }
+
+      document.getElementById('shuffle').addEventListener('click', reset);
+
+      stepBtn.addEventListener('click', () => {
+        stop();
+        step();
+      });
+
+      playBtn.addEventListener('click', () => {
+        if (isPlayerMode()) return;
+        if (playing) {
+          stop();
+          return;
+        }
+        playBtn.textContent = 'Pause';
+        playing = setInterval(step, 120);
+      });
+
+      sizeEl.addEventListener('change', reset);
+      modeEl.addEventListener('change', () => {
+        stop();
+        selected = null;
+        setModeUI();
+        statusEl.classList.remove('win');
+        statusEl.textContent = isPlayerMode()
+          ? 'Player mode enabled. Click bars to swap neighbors.'
+          : 'Auto mode enabled. Use Step or Play.';
+        render();
+      });
+
+      reset();
+    </script>
   </body>
 </html>
-
